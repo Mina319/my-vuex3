@@ -29,11 +29,58 @@ See [Configuration Reference](https://cli.vuejs.org/config/).
 ## 项目创建详情
 
 ### 使用vue.use 启用 vuex 插件
-vue.use 是 vue 提供的安装插件 API。如果插件是一个对象，必须提供 install 方法；如果一个插件是一个函数，它被视为 install 方法。install 方法调用时，会将Vue作为参数传入。这个方法的死一个参数是 Vue 构造器，第二个参数是一个可选的选项对象。
+新建`src/vuex/index.js`
 
-即需要导出 install 方法，同时导出一个类Store。
+```js
+let Vue = null
+
+class Store {
+    constructor(options){}
+}
+
+function install(_Vue) {
+    Vue = _Vue
+}
+
+export default {
+    Store,
+    install
+}
+
+```
+
+新建`src/store.index.js`文件
+
+```js
+import Vue from "vue"
+import Vuex from '../vuex'
+
+Vue.use(Vuex)
+
+```
+
+在`src/vuex/index.js`填充install方法
+
+```js
+function install(_Vue) {
+    Vue = _Vue
+    // 实现每一个组件，都能通过 this 调用 $store
+    Vue.mixin({
+        beforeCreate(){
+            // 通过 this.$options 可以获取  new Vue({参数})传递的参数
+            if (this.$options && this.$options.store) {
+                // vue的原型上挂载 store （store 的实例）
+                this.$store = this.$options.store
+                // 等同于 Vue.prototype.$store = this.$options.store
+            }
+        }
+    })
+}
+```
+
 
 ### Store
+`src/store.index.js`中的Store类
 在Vuex中，Store是一个对象，它是一个容器，用于存储和管理状态（state），包含了以下几个主要部分：
 - state：存储状态的数据，也就是全局要共享的数据
 - getters：包含一些函数，用于对state进行计算操作。
@@ -116,6 +163,120 @@ class Store {
 
 
 实现了Vuex的基础功能，现在继续对其进行完善，实现模块化的状态管理。模块化可以帮助我们更好地组织和管理复杂的应用状态，使得状态的结构更加清晰和可维护。
+
+### 格式化参数
+
+将参数模块格式化为模块嵌套的树形结构，方便我们后续的操作。
+```js
+// 根模块
+this.root = { // 模块的配置：包含当前模块的 state、getters、mutations、actions
+    _raw: XXX,
+    _children: { // 子模块
+        a模块: {
+            _raw: XXX,
+            _children: {},
+            state: xxx.state
+        },
+        b模块: {
+            _raw: XXX,
+            _children: {},
+            state: xxx.state
+        },
+    },
+    state: xxx.state
+}
+
+```
+#### Module 类
+新建`src/vuex/module.js`
+创建Module类，通过new Module便可以得到格式化的树形数据结构。
+```js
+export default class Module {
+    constructor(rootModule) {
+        this._raw = rootModule
+        this._children = {}
+        this.state = rootModule.state
+    }
+}
+```
+
+#### ModuleCollection
+新建`src/vuex/module-collection.js`
+在这个类中，实现将用户传入的参数转化为格式化的结果
+```js
+import Module from "./module";
+import forEachValue from "./utils";
+
+export default class ModuleCollection {
+    constructor(options) {
+        // 注册模块： []表示路径 递归注册模块
+        this.register([], options)
+    }
+
+    register(path, rootModule){
+        const newModule = new Module(rootModule)
+
+        if(path.length === 0) { // 根模块
+            this.root = newModule
+        } else {
+            const parent = path.slice(0,-1).reduce((pre, next) => {
+                return pre.getChild(next)
+            },this.root)
+            parent.addChild(path[path.length-1], newModule)
+        }
+
+        // 注册子模块
+        if(rootModule.Module){
+            forEachValue(rootModule.modules, (moduleValue, moduleName) => {
+                // 递归
+                this.register([...path, moduleName], moduleValue)
+            })
+        }
+    }
+}
+```
+
+
+
+#### forEachValue
+
+`src/vuex/module-collection.js`需要导入`forEachValue`函数，我们新建文件`src/vuex/utils.js`，在里面定义并导出
+```js
+/**
+ * 遍历对象的每个键值对，并对每个值执行回调函数。
+ * 
+ * @param {Object} obj - 需要遍历的对象，默认值为空对象。
+ * @param {Function} callback - 回调函数，接收两个参数：对象的值和键。
+ */
+const forEachValue = (obj = {}, callback) => {
+    Object.keys(obj).forEach(key => {
+        // 第一个参数是值，第二个参数是键
+        callback(obj[key], key)
+    })
+}
+
+export default forEachValue
+```
+
+#### getChild、addChild
+增加获取子模块和追加子模块方法，便于调用
+```js
+export default class Module {
+    // 找到模块的子模块
+    getChild(key){
+        // key：子模块名
+        return this._children[key]
+    }
+
+    // 向模块module 追加 子模块key
+    addChild(key, module) {
+        this._children[key] = module
+    }
+}
+```
+至此，完成模块格式化为模块嵌套的树形结构，接下来重构Store，实现state、getter、commit、dispatch等
+
+
 
 
 
