@@ -22,12 +22,13 @@ class Store {
     this.actions = actions
   }
 
-  commit (type, payload) {
-    /**
-     * type: string 类型，表示要调用的 mutation 的名称
-     * payload:传递给 mutation 的数据
+  /**
      * 同步修改state数据
+     *
+     * @param {string} type - 表示要调用的 mutation 的函数名
+     * @param {*} payload - 传递给 mutation 的数据
      */
+  commit (type, payload) {
     // 检查 mutations 中是否存在该 type
     if (!this.mutations[type]) {
       throw new Error(`Mutation "${type}" not found`)
