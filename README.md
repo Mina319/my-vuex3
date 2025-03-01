@@ -420,7 +420,28 @@ class Store {
 #### commit(mutations)
 `\src\vuex\index.js`
 
+```js
 
+class Store {
+  constructor (options) {
+    this._mutations = Object.create(null)  // 存放所有模块的mutation
+  }
+}
+
+function installModule (store, rootState, path, module) {
+
+  module.forEachMutations((mutations, type) => {
+    // 手机所有模块的mutations 存放到 实例的 store._mutations上
+    // 同名的mutations和actions 并不会覆盖，所以要有一个数组存储 {changeAge:[fn,fn,fn]}
+    store._mutations[type] = (store._mutations[type] || [])
+    store._mutations[type].push((payload) => {
+      // 函数包装  包装传参是灵活的
+      // 使this 永远指向实例  当前模块状态 入参数
+      mutations.call(store, module.state, payload)
+    })
+  })
+}
+```
 
 #### forEachActions
 `moudle.js`中
@@ -433,14 +454,21 @@ class Store {
   }
 ```
 
-
-
-
-
 #### dispatch(actions)
+`\src\vuex\index.js`中
 
+```js
+class Store {
+  constructor (options) {
+    this._actions = Object.create(null)  // 存放所有模块的actions
+  }
 
+  dispatch (type, payload) {
+    this._actions[type].forEach(fn => fn(payload))
+  }
+}
 
+```
 
 
 

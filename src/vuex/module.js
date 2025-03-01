@@ -31,17 +31,16 @@ export default class Module {
   }
 
   // 遍历当前模块的mutations
-  forEachMutations(fn) {
+  forEachMutations (fn) {
     if (this._raw.forEachMutations) {
       forEachValue(this._raw.mutations, fn)
     }
   }
 
   // 遍历当前模块的actions
-  forEachActions(fn) {
-    if(this._raw.actions) {
+  forEachActions (fn) {
+    if (this._raw.actions) {
       forEachValue(this._raw.actions, fn)
     }
   }
-
 }

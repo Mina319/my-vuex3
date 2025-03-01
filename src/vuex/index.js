@@ -22,6 +22,8 @@ class Store {
 
     this._modules = new ModuleCollection(options)
     this._wrappedGetters = Object.create(null) // 存放所有模块的getters
+    this._mutations = Object.create(null) // 存放所有模块的mutation
+    this._actions = Object.create(null) // 存放所有模块的actions
 
     // 注册所有模块到Store实例上
     // this当前、根状态、路径、根模块
@@ -54,6 +56,7 @@ class Store {
     if (!this.actions[type]) {
       throw new Error(`Action "${type}" not found`)
     }
+    this._actions[type].forEach(fn => fn(payload))
     return this.actions[type]({ commit: this.commit, state: this.state }, payload)
   }
 }
@@ -98,10 +101,20 @@ function installModule (store, rootState, path, module) {
   module.forEachMutations((mutations, type) => {
     // 手机所有模块的mutations 存放到 实例的 store._mutations上
     // 同名的mutations和actions 并不会覆盖，所以要有一个数组存储 {changeAge:[fn,fn,fn]}
-
+    store._mutations[type] = (store._mutations[type] || [])
+    store._mutations[type].push((payload) => {
+      // 函数包装  包装传参是灵活的
+      // 使this 永远指向实例  当前模块状态 入参数
+      mutations.call(store, module.state, payload)
+    })
   })
 
-
+  module.forEachActions((actions, type) => {
+    store._actions[type] = (store._actions[type] || [])
+    store._actions[type].push((payload) => {
+      actions.call(store, store, payload)
+    })
+  })
 }
 
 function resetStoreVm (store, state) {
