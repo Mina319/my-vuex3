@@ -276,6 +276,171 @@ export default class Module {
 ```
 至此，完成模块格式化为模块嵌套的树形结构，接下来重构Store，实现state、getter、commit、dispatch等
 
+### installModule
+installModule方法：将创建的树形结构上的状态、方法安装到Store实例上，就可以通过$store方式获取到对应的数据，修改`src/vuex/index.js`如下：
+```js
+function installModule(store, rootState, path, module) {
+    // 收集所有模块的状态
+    if(path.length > 0){ // 如果是子模块，就需要将子模块的状态定义到根模块上
+        let parent = path.slice(0,-1).reduce((pre, next) => {
+            return pre[next]
+        }, rootState)
+        // 将属性设置为响应式，可以新增属性
+        // 如果对象不是响应式的话会直接赋值，如果是响应式此时新增的属性也是响应式
+        Vue.set(parent, path[path.length - 1], module.state)
+    }
+
+    module.forEachChild((child, key) => {
+        installModule(store,rootState, path.concat(key), child)
+    })
+}
+
+class Store {
+  constructor (options) {
+    this._modules = new ModuleCollection(options)
+    // 注册所有模块到Store实例上
+    // this当前、根状态、路径、根模块
+    const state = this._modules.root.state
+    installModule(this,state, [], this._modules.root)
+  }
+}
+```
+
+#### forEachChild
+`src/vuex/index.js`中调用了`forEachChild`,在Module中定义一下
+```js
+// module.js
+export default class Module {
+    // 遍历当前模块的child
+    forEachChild(fn) {
+        forEachValue(this._children, fn)
+    }
+}
+```
+
+#### resetStoreVm
+实现state数据响应式, `src/vuex/index.js`中定义函数`resetStoreVm`
+```js
+function resetStoreVm(store, state) {
+    const wrappedGetters = store._wrappedGetters
+    const computed = {}
+    store.getters = Object.create(null)
+    // 通过使用vue的computed实现缓存
+    forEachValue(_wrappedGetters, (fn, key) => {
+        computed[key] = () => {
+            return fn()
+        }
+
+        // 代理
+        Object.defineProperty(store.getters, key, {
+            get: () => { return store._vm[key]}
+        })
+    })
+    // 将状态实现响应式
+    store._vm = new Vue({
+        data() {
+            return {
+                $$state: state
+            }
+        },
+        computed
+    })
+}
+
+
+
+class Store {
+  constructor (options) {
+    // 注册所有模块到Store实例上
+    // this当前、根状态、路径、根模块
+    let state = this._modules.root.state
+    ...
+    // 实现state响应式
+    resetStoreVm(this, this.state)
+  }
+
+  get state() {
+    return this._vm._data.$$state
+  }
+}
+```
+
+
+#### forEachGetters
+
+扩展Module类，遍历getters
+
+```js
+export default class Module {
+  // 遍历当前模块的getters
+  forEachGetters(fn) {
+    if (this._raw.getters) {
+        forEachValue(this._raw.getters, fn)
+    }
+  }
+}
+
+```
+
+#### getter
+`installModule`中有调用`_wrappedGetters`,对应Store中需要定义
+```js
+function installModule (store, rootState, path, module) {
+  // 收集所有模块的状态
+
+  module.forEachGetters((getters, keys) => {
+    // 同名计算属性会覆盖，所以不用存储
+    store._wrappedGetters[key] = () => {
+        return getters(module.state)
+    }
+  })
+}
+
+class Store {
+  constructor (options) {
+    this._wrappedGetters = Object.create(null) // 存放所有模块的getters
+  }
+}
+
+
+```
+
+#### forEachMutations
+
+`moudle.js`中
+```js
+  // 遍历当前模块的mutations
+  forEachMutations(fn) {
+    if (this._raw.forEachMutations) {
+      forEachValue(this._raw.mutations, fn)
+    }
+  }
+```
+
+#### commit(mutations)
+`\src\vuex\index.js`
+
+
+
+#### forEachActions
+`moudle.js`中
+```js
+  // 遍历当前模块的actions
+  forEachActions(fn) {
+    if(this._raw.actions) {
+      forEachValue(this._raw.actions, fn)
+    }
+  }
+```
+
+
+
+
+
+#### dispatch(actions)
+
+
+
 
 
 
