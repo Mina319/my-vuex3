@@ -470,6 +470,9 @@ class Store {
 
 ```
 ### namespace
+默认情况下，模块内部的action、mutation和getter 是注册在**全局命名空间**的——这样使得多个模块能够对同一mutation 或 action作出响应。
+
+如果想要模块具有更高的封装度和复用性，可以通过添加 namespace:true 的方式使其成为带命名空间的模块。当模块被注册后，它的所有getter、action及mutation都会自动根据模块注册的路径调整命名。
 
 #### getNamespaced
 
