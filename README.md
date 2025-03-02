@@ -584,10 +584,178 @@ function enableStrictMode(store) {
 以上只是基于vuex源码实现了最核心的功能，但它帮助我们更好的理解了Vuex的模块化的实现原理。
 
 ### map 辅助函数
+#### 使用方法
 
-#### 
+- mapState(namespace?:string,map:Array<string>|Object<string|function>>):Object
+这里以mapSet为例，简单看下map辅助函数的三种使用方法，如下：
+
+新建`/vuex/helpers.js`
+```js
+export default {
+    computed: mapState({
+        // 箭头函数可使代码更简练
+        count: state => state.count,
+
+        // 传字符串参数'count' 等同于 'state => state.count'
+        ciuntAlias: 'count',
+        // 为了能够使用 this 获取局部状态，必须使用常规函数
+        countPlusLocalState(state) {
+            return state.count + this.localCount
+        }
+    })
+}
+```
+如果不考虑namespace,以数组为例，可以很简单的实现mapState方法
+```js
+const mapState = args => {
+    let states = {}
+    args.forEach(item => {
+        states[item] = function() {
+            return this.$store.state[item]
+        }
+    })
+    return states
+}
+```
+
+#### normalizeMap
+由于用户传入可能为数组或对象，首先需要格式化参数格式
+```js
+function normalizeMap(map) {
+    return Array.isArray(map)
+    ? map.map(key => ({key,val:key}))
+    : Object.keys(map).map(key => ({key, val: map[key]}))
+}
+```
+#### normallizeNamespace
+根据namespace配置，对开启命名空间的模块，拼接路径参数
+```js
+function normalizeNamespace(fn) {
+    return (namespace, map) => {
+        if(typeof namespace !== 'string') {
+            map = namespace
+            namespace = ''
+        } else if (namespace.charAt(namespace.length - 1) !== '/') {
+            namespace += '/'
+        }
+        return fn(namespace, map)
+    }
+}
+```
+#### getModuleByNamespace
+获取namespace对应的module模块，注：这里可以参考namespace一节中的数据结构，就很容易理解
+```js
+function getModuleByNamespace(store, helper, namespace) {
+    const module = store._modulesNamespaceMap[namespace]
+    if(!module) {
+        console.error(`[vuex] module namespace not found in ${helper}(): ${namespace}`)
+        return module
+    }
+}
+```
+#### mapState
+```js
+export const mapState = normalizeNamespace((namespace,states) => {
+    const res = []
+    normalizeMap(states).forEach(({key, val}) => {
+        res[key] = function mappedState() {
+            // 根模块 state、getters
+            let state = this.$store.state
+            let getters = this.$store.getters
+            if(namespace) {
+                // 通过 namespace 拿到相应的模块
+                const module = getModuleByNamespace(this.$store, 'mapState', namespace)
+                if(!module) {
+                    return
+                }
+                // 子模块 state、getter
+                state = module.state
+                getters = module.getters
+            }
+            // 如：一下场景的配置项，需要执行函数，得到最终结果再返回
+            return typeof val === 'function'
+                ? val.call(this, state, getters)
+                : state[val]
+        }
+    })
+    return res
+})
+```
+同理可依次实现mapGetters、mapMutations、maoActions辅助函数
+
+#### mapGetters
+```js
+export const mapGetters = normalizeNamespace((namespace, getters) => {
+    const res = {}
+
+    normalizeMap(getters).forEach(({key, val}) => {
+        val = namespace + val
+        res[key] = function mappedGetter() {
+            if (namespace && !getModuleByNamespace(this.$store, 'mapGetters', namespace)) {
+                return
+            }
+            return this.$store.getters[val]
+        }
+    })
+    return res
+})
+```
+
+#### mapMutations
+
+```js
+export const mapMutations = normalizeNamespace((namespace, mutations) => {
+    const res = {}
+    normalizeMap(mutations).forEach(({key, val}) => {
+        res[key] = function mappedMutation(...args) {
+            // 从store获取 commit 方法
+            let commit = this.$store.commit
+            if(namespace) {
+                const module = getModuleByNamespace(this.$store, 'mapMutations', namespace)
+                if(!module) {
+                    return
+                }
+                const _type = namespace + val
+                commit = () => { this.$store.commit(_type)}
+            }
+            return typeof val === 'function'
+                ? val.apply(this, [commit].concat(args))
+                : commit.apply(this.$store, [val].concat(args))
+        }
+    })
+    return res
+})
+```
 
 
+#### mapActions
+```js
+export const mapActions = normalizeNamespace((namespace, actions) => {
+  const res = {}
+
+  normalizeMap(actions).forEach(({ key, val }) => {
+    res[key] = function mappedAction (...args) {
+      let dispatch = this.$store.dispatch
+      if (namespace) {
+        const module = getModuleByNamespace(this.$store, 'mapActions', namespace)
+        if (!module) {
+          return
+        }
+        const _type = namespace + val
+        dispatch = () => {
+          return this.$store.dispatch(_type)
+        }
+      }
+      return typeof val === 'function'
+        ? val.apply(this, [dispatch].concat(args))
+        : dispatch.apply(this.$store, [val].concat(args))
+    }
+  })
+  return res
+})
+```
+
+到此，手写Vuex基础功能、模块化、命名空间、严格模式等已完结，以源码为例，实现了一个简易的Vuex3！
 
 
 
