@@ -3,6 +3,12 @@ import forEachValue from './utils'
 
 let Vue = null
 
+function enableStrictMode (store) {
+  store._vm.$watch(function () { return this._data.$$state }, () => {
+    console.assert(store._commiting, '[vuex] do mot mutate vuex store state outside mutation handlers.')
+  }, { deep: true, sync: true })
+}
+
 class Store {
   constructor (options) {
     // 初始化一个空对象
@@ -19,7 +25,11 @@ class Store {
 
     const { actions = {} } = options
     this.actions = actions
-
+    // strict 模式
+    const { strict = false } = options
+    this.strict = strict
+    // 添加committing 状态
+    this._commiting = false
     this._modules = new ModuleCollection(options)
     this._wrappedGetters = Object.create(null) // 存放所有模块的getters
     this._mutations = Object.create(null) // 存放所有模块的mutation
@@ -30,13 +40,23 @@ class Store {
     const state = this._modules.root.state
     installModule(this, state, [], this._modules.root)
     // 实现state响应式
-    resetStoreVm(this, this.state)
+    resetStoreVm(this, state)
   }
 
   get state () {
     return this._vm._data.$$state
   }
 
+  // 在 mutation 之前，设置 _commit = true, 调用 mutation之后更改状态
+  // 如此当状态变化时，_commiting 为 true，说明是同步更改，false说明是 非mutation提交
+  _withCommit (fn) {
+    const commiting = this._commiting
+    this._commiting = true
+    fn()
+    this._commiting = commiting
+  }
+
+  // 修改 commit方法，使用_withCommit 调用 mutation
   /**
      * 同步修改state数据
      *
@@ -48,7 +68,12 @@ class Store {
     if (!this.mutations[type]) {
       throw new Error(`Mutation "${type}" not found`)
     }
-    this.mutations[type](this.state, payload)
+    const entry = this._mutations[type]
+    this._withCommit(() => {
+      entry.forEach((fn) => {
+        fn(payload)
+      })
+    })
   }
 
   dispatch (type, payload) {
@@ -124,6 +149,11 @@ function resetStoreVm (store, state) {
   const wrappedGetters = store._wrappedGetters
   const computed = {}
   store.getters = Object.create(null)
+  // 如果开启了严格模式，则调用 enableStrict
+  if (store.strict) {
+    enableStrictMode(store)
+  }
+
   // 通过使用vue的computed实现缓存
   forEachValue(wrappedGetters, (fn, key) => {
     computed[key] = () => {
