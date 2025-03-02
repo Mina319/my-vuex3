@@ -525,6 +525,68 @@ function installModule (store, rootState, path, module) {
 
 ```
 
+### 严格模式
+在严格模式下，无论何时发生了状态变更且不是由mutation函数引起的，将会抛出错误。这能保证所有的状态变更能被调试工具跟踪到。
+
+#### 接收strict配置项，添加mutation提交状态标识
+```js
+
+class Store {
+  constructor (options) {
+    // strict 模式
+    const { strict = false } = options
+    this.strict = strict
+    // 添加committing 状态
+    this._commiting = false
+  }
+
+  // 在 mutation 之前，设置 _commit = true, 调用 mutation之后更改状态
+  // 如此当状态变化时，_commiting 为 true，说明是同步更改，false说明是 非mutation提交
+  _withCommit (fn) {
+    const commiting = this._commiting
+    this._commiting = true
+    fn()
+    this._commiting = commiting
+  }
+
+  // 修改 commit方法，使用_withCommit 调用 mutation
+  commit (type, payload) {
+    // 检查 mutations 中是否存在该 type
+    if (!this.mutations[type]) {
+      throw new Error(`Mutation "${type}" not found`)
+    }
+    const entry = this._mutations[type]
+    this._withCommit(() => {
+      entry.forEach((fn) => {
+        fn(payload)
+      })
+    })
+  }
+
+function resetStoreVm (store, state) {
+  // 如果开启了严格模式，则调用 enableStrict
+  if(store.strict){
+    enableStrictMode(store)
+  }
+}
+```
+
+### enableStrictMode
+监听 state 数据变化，判断_committing 如果是true表示同步执行，如果为false，则会排除错误提示。
+在`src/vuex/index.js`
+```js
+function enableStrictMode(store) {
+  store._vm.$watch(function() {return this._data.$$state}, () => {
+    console.assert(store._commiting, `[vuex] do mot mutate vuex store state outside mutation handlers.`)
+  }, {deep: true, sync: true})
+}
+```
+以上只是基于vuex源码实现了最核心的功能，但它帮助我们更好的理解了Vuex的模块化的实现原理。
+
+### map 辅助函数
+
+#### 
+
 
 
 
