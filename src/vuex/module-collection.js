@@ -27,4 +27,15 @@ export default class ModuleCollection {
       })
     }
   }
+
+  // 获取命名空间
+  getNamespaced (path) {
+    let root = this.root
+    return path.reduce((pre, next) => {
+      // 获取子模块  查看是否有 namespaced 属性
+      root = root.getChild(next)
+      // 拼接上有namespace属性的路径
+      return pre + (root.namespaced ? next + '/' : '')
+    }, '')
+  }
 }

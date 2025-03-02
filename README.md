@@ -469,6 +469,58 @@ class Store {
 }
 
 ```
+### namespace
+
+#### getNamespaced
+
+在`module-collection.js`中
+```js
+export default class ModuleCollection {
+  // 获取命名空间
+  getNamespaced(path){
+    let root = this.root
+    return path.reduce((pre, next) => {
+      // 获取子模块  查看是否有 namespaced 属性
+      root = root.getChild(next)
+      // 拼接上有namespace属性的路径
+      return pre+ (root.namespaced ? next + '/' : '')
+    }, '')
+  }
+}
+```
+
+#### 添加namespace
+`/src/vuex/index.js`
+
+```js
+function installModule (store, rootState, path, module) {
+  // 获取命名空间
+  const namespaced = store._modules.getNamespaced(path)
+  module.forEachGetters((getters, key) => {
+    // 同名计算属性会覆盖，所以不用存储
+    store._wrappedGetters[namespaced + type] = () => {
+      return getters(module.state)
+    }
+  })
+  module.forEachMutations((mutations, type) => {
+    // 手机所有模块的mutations 存放到 实例的 store._mutations上
+    // 同名的mutations和actions 并不会覆盖，所以要有一个数组存储 {changeAge:[fn,fn,fn]}
+    store._mutations[namespaced + type] = (store._mutations[namespaced + type] || [])
+    store._mutations[namespaced + type].push((payload) => {
+      // 函数包装  包装传参是灵活的
+      // 使this 永远指向实例  当前模块状态 入参数
+      mutations.call(store, module.state, payload)
+    })
+  })
+  module.forEachActions((actions, type) => {
+    store._actions[namespaced + type] = (store._actions[type] || [])
+    store._actions[namespaced + type].push((payload) => {
+      actions.call(store, store, payload)
+    })
+  })
+}
+
+```
 
 
 

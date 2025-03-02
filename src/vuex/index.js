@@ -77,6 +77,9 @@ function install (_Vue) {
 }
 
 function installModule (store, rootState, path, module) {
+  // 获取命名空间
+  const namespaced = store._modules.getNamespaced(path)
+
   // 收集所有模块的状态
   if (path.length > 0) { // 如果是子模块，就需要将子模块的状态定义到根模块上
     const parent = path.slice(0, -1).reduce((pre, next) => {
@@ -91,9 +94,9 @@ function installModule (store, rootState, path, module) {
     installModule(store, rootState, path.concat(key), child)
   })
 
-  module.forEachGetters((getters, key) => {
+  module.forEachGetters((getters, type) => {
     // 同名计算属性会覆盖，所以不用存储
-    store._wrappedGetters[key] = () => {
+    store._wrappedGetters[namespaced + type] = () => {
       return getters(module.state)
     }
   })
@@ -101,8 +104,8 @@ function installModule (store, rootState, path, module) {
   module.forEachMutations((mutations, type) => {
     // 手机所有模块的mutations 存放到 实例的 store._mutations上
     // 同名的mutations和actions 并不会覆盖，所以要有一个数组存储 {changeAge:[fn,fn,fn]}
-    store._mutations[type] = (store._mutations[type] || [])
-    store._mutations[type].push((payload) => {
+    store._mutations[namespaced + type] = (store._mutations[namespaced + type] || [])
+    store._mutations[namespaced + type].push((payload) => {
       // 函数包装  包装传参是灵活的
       // 使this 永远指向实例  当前模块状态 入参数
       mutations.call(store, module.state, payload)
@@ -110,8 +113,8 @@ function installModule (store, rootState, path, module) {
   })
 
   module.forEachActions((actions, type) => {
-    store._actions[type] = (store._actions[type] || [])
-    store._actions[type].push((payload) => {
+    store._actions[namespaced + type] = (store._actions[type] || [])
+    store._actions[namespaced + type].push((payload) => {
       actions.call(store, store, payload)
     })
   })
